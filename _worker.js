@@ -11,6 +11,7 @@ let 反代IP = 'proxyip.cmliussss.net'; //反代IP
 
 export default {
   async fetch(访问请求) {
+      console.log('收到请求', 访问请求.method, 访问请求.url);
     if (访问请求.headers.get('Upgrade') === 'websocket') {
       const 读取路径 = decodeURIComponent(访问请求.url.replace(/^https?:\/\/[^/]+/, ''));
       反代IP = 读取路径.match(/ip=([^&]+)/)?.[1] || 反代IP;
