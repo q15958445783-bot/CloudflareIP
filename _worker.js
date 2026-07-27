@@ -11,7 +11,7 @@ let 反代IP = 'proxyip.cmliussss.net'; //反代IP
 
 export default {
   async fetch(访问请求) {
-      console.log('收到请求', 访问请求.method, 访问请求.url);
+    console.log('收到请求', 访问请求.method, 访问请求.url);
     if (访问请求.headers.get('Upgrade') === 'websocket') {
       const 读取路径 = decodeURIComponent(访问请求.url.replace(/^https?:\/\/[^/]+/, ''));
       反代IP = 读取路径.match(/ip=([^&]+)/)?.[1] || 反代IP;
@@ -46,21 +46,43 @@ vless://${我的VL密钥}@188.114.96.0:443?encryption=none&security=tls&sni=${�
     }
   }
 };
+
 async function 启动传输管道(WS接口, TCP接口) {
   let 识别地址类型, 访问地址, 地址长度, 首包数据 = false, 首包处理完成 = null, 传输数据, 读取数据, 传输队列 = Promise.resolve();
   try {
     WS接口.addEventListener('message', async event => {
-      if (!首包数据) {
-        首包数据 = true;
-        首包处理完成 = 解析首包数据(event.data);
-        传输队列 = 传输队列.then(() => 首包处理完成).catch(e => { throw (e) });
-      } else {
-        await 首包处理完成;
-        传输队列 = 传输队列.then(() => 传输数据.write(event.data)).catch(e => { throw (e) });
+      try {
+        console.log('WS消息，类型:', typeof event.data, '原始类型:', event.data?.constructor?.name);
+        // Convert event.data to ArrayBuffer if needed
+        let rawData = event.data;
+        if (typeof rawData === 'string') {
+          const encoder = new TextEncoder();
+          rawData = encoder.encode(rawData).buffer;
+          console.log('转为ArrayBuffer，长度:', rawData.byteLength);
+        } else if (rawData instanceof ArrayBuffer) {
+          console.log('已是ArrayBuffer，长度:', rawData.byteLength);
+        } else if (rawData && typeof rawData.arrayBuffer === 'function') {
+          rawData = await rawData.arrayBuffer();
+          console.log('调用arrayBuffer()，长度:', rawData.byteLength);
+        } else {
+          console.log('未知数据类型:', typeof rawData);
+        }
+
+        if (!首包数据) {
+          首包数据 = true;
+          首包处理完成 = 解析首包数据(rawData);
+          传输队列 = 传输队列.then(() => 首包处理完成).catch(e => { console.error('首包处理失败:', e.message); throw e; });
+        } else {
+          await 首包处理完成;
+          传输队列 = 传输队列.then(() => 传输数据.write(rawData)).catch(e => { console.error('写入失败:', e.message); throw e; });
+        }
+      } catch(err) {
+        console.error('消息处理异常:', err.message);
       }
     });
+
     async function 解析首包数据(首包数据) {
-      console.log('收到首包，长度:', 首包数据.byteLength);
+      console.log('解析首包，字节长度:', 首包数据?.byteLength);
       const 二进制数据 = new Uint8Array(首包数据);
       const 协议头 = 二进制数据[0];
       const 验证VL的密钥 = (a, i = 0) => [...a.slice(i, i + 16)].map(b => b.toString(16).padStart(2, '0')).join('').replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
@@ -118,6 +140,7 @@ async function 启动传输管道(WS接口, TCP接口) {
       console.log('已发送VLESS响应，启动回传管道');
       启动回传管道();
     }
+
     async function 启动回传管道() {
       while (true) {
         await 传输队列;
