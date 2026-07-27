@@ -10,47 +10,51 @@ let 我的VL密钥 = '60fe73d3-dbf3-44b2-804c-1f791363ef62';//UUID
 let 反代IP = 'proxyip.cmliussss.net'; //反代IP
 
 
-// Dynamic node fetching from GitHub Actions speed-test data
+// Dynamic node fetching from GitHub Actions (hourly updated per-region TXT files)
 async function fetchSpeedNodes(uuid, domain, proxyIP) {
-  const regionNames = { SG: "singapore", JP: "japan", HK: "hongkong", US: "usa", DE: "germany", NL: "netherlands" };
-  const data = {};
-  for (const k of Object.keys(regionNames)) data[k] = [];
+  const BASE = "https://raw.githubusercontent.com/wszhxz/CloudflareIP/main";
+  const regionFiles = {
+    SG: "SG.txt", JP: "JP.txt", DE: "DE.txt", NL: "NL.txt", US: "US.txt"
+  };
+  const cnames = { SG: "\u65b0\u52a0\u5761", JP: "\u65e5\u672c", HK: "\u9999\u6e2f", US: "\u7f8e\u56fd", DE: "\u5fb7\u56fd", NL: "\u8377\u5170" };
+
+  const nodes = [];
 
   try {
-    const BASE = "https://raw.githubusercontent.com/wszhxz/CloudflareIP/main";
-    const [ctry, more] = await Promise.all([
-      fetch(BASE + "/country.txt"),
-      fetch(BASE + "/More.txt")
-    ]);
+    // Fetch all per-region TXT files in parallel
+    const fetches = {};
+    for (const [code, file] of Object.entries(regionFiles)) {
+      fetches[code] = fetch(BASE + "/" + file).then(r => r.ok ? r.text() : "").catch(() => "");
+    }
+    fetches["HK"] = fetch(BASE + "/More.txt").then(r => r.ok ? r.text() : "").catch(() => "");
 
-    if (ctry.ok) {
-      for (const line of (await ctry.text()).split("\n")) {
-        const m = line.match(/^([\d.]+)#(\S+)\s+\S+\s+\S+\s+([\d.]+)m\/s/);
-        if (!m) continue;
-        const r = m[2].toUpperCase();
-        if (data[r]) data[r].push({ ip: m[1], sp: parseFloat(m[3]) });
-      }
+    const results = {};
+    for (const code of Object.keys(fetches)) {
+      results[code] = await fetches[code];
     }
 
-    if (more.ok) {
-      for (const line of (await more.text()).split("\n")) {
-        const m = line.match(/^([\d.]+)#\u9999\u6e2f-([\d.]+)MB\/s/);
-        if (m) data["HK"].push({ ip: m[1], sp: parseFloat(m[2]) });
+    // Parse each region: take top 3 IPs (already sorted by latency in files)
+    for (const [code, name] of Object.entries(cnames)) {
+      const text = results[code];
+      if (!text) continue;
+      const lines = text.split("\n");
+      const seen = new Set();
+      let count = 0;
+      for (const line of lines) {
+        if (count >= 3) break;
+        // SG.txt format: "IP#sg \u3010\u65b0\u52a0\u5761\u3011 SG"
+        // More.txt HK format: "IP#\u9999\u6e2f-XXMB/s"
+        const m = line.match(/^([\d.]+)#/);
+        if (!m) continue;
+        const ip = m[1];
+        if (seen.has(ip)) continue;
+        seen.add(ip);
+        nodes.push("vless://"+uuid+"@"+ip+":443?encryption=none&security=tls&sni="+domain+"&fp=random&type=ws&host="+domain+"&path=pyip%3D"+proxyIP+"#"+code+" "+name);
+        count++;
       }
     }
   } catch (e) { console.error("fetchSpeedNodes error:", e.message); }
 
-  const nodes = [];
-  const cnames = { SG: "\u65b0\u52a0\u5761", JP: "\u65e5\u672c", HK: "\u9999\u6e2f", US: "\u7f8e\u56fd", DE: "\u5fb7\u56fd", NL: "\u8377\u5170" };
-  for (const [code, name] of Object.entries(cnames)) {
-    const ips = data[code];
-    if (!ips.length) continue;
-    const dedup = {};
-    for (const {ip, sp} of ips) { if (!dedup[ip] || sp > dedup[ip]) dedup[ip] = sp; }
-    Object.entries(dedup).sort(function(a,b){return b[1]-a[1]}).slice(0,3).forEach(function(pair){
-      nodes.push("vless://"+uuid+"@"+pair[0]+":443?encryption=none&security=tls&sni="+domain+"&fp=random&type=ws&host="+domain+"&path=pyip%3D"+proxyIP+"#"+code+" "+name);
-    });
-  }
   return nodes;
 }
 // 动态获取最新测速节点（从 GitHub Actions 产出）
