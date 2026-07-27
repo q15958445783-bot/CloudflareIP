@@ -7,7 +7,7 @@
 import { connect } from 'cloudflare:sockets';
 
 let 我的VL密钥 = '60fe73d3-dbf3-44b2-804c-1f791363ef62';//UUID
-let 反代IP = 'proxyip.cmliussss.net'; //反代IP
+let 反代IP = 'proxy.teracoin.top:8443'; //反代IP
 
 export default {
   async fetch(访问请求) {
@@ -25,6 +25,20 @@ export default {
         const 请求路径 = 请求URL.pathname;
         const 节点路径 = '/sub';
         if (请求路径 === 节点路径) {
+            const 节点列表 = [
+                `vless://${我的VL密钥}@${部署域名}:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#${部署域名}`,
+                `vless://${我的VL密钥}@108.162.192.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#SG 新加坡`,
+                `vless://${我的VL密钥}@108.162.198.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#JP 日本`,
+                `vless://${我的VL密钥}@104.18.0.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#US 美国`,
+                `vless://${我的VL密钥}@104.26.0.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#DE 德国`,
+                `vless://${我的VL密钥}@188.114.96.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#NL 荷兰`,
+            ];
+            if (请求URL.searchParams.has('sub')) {
+                const 原始 = 节点列表.join('\n');
+                const 字节 = new TextEncoder().encode(原始);
+                const base64订阅 = btoa(String.fromCharCode(...字节));
+                return new Response(base64订阅, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+            }
             return new Response(`部署成功！
 
    你的UUID: ${我的VL密钥}
@@ -32,13 +46,9 @@ export default {
    你的反代ip：${反代IP}
 
 默认节点：
-vless://${我的VL密钥}@${部署域名}:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#${部署域名}
-vless://${我的VL密钥}@108.162.192.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#sg 新加坡 SG
-vless://${我的VL密钥}@108.162.198.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#jp 日本 JP
-vless://${我的VL密钥}@104.18.0.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#us 美国 US
-vless://${我的VL密钥}@104.26.0.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#de 德国 DE
-vless://${我的VL密钥}@188.114.96.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#nl 荷兰 NL
+${节点列表.join('\n')}
 
+订阅链接：https://${部署域名}/sub?sub
 更多节点使用手搓节点生成器： http://ip.cloudip.ggff.net`, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
         } else {
             return new Response('部署成功，使用你的路径查看节点信息！', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
