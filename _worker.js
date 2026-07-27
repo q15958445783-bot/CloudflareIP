@@ -9,6 +9,52 @@ import { connect } from 'cloudflare:sockets';
 let 我的VL密钥 = '60fe73d3-dbf3-44b2-804c-1f791363ef62';//UUID
 let 反代IP = 'proxyip.cmliussss.net'; //反代IP
 
+
+// Dynamic node fetching from GitHub Actions speed-test data
+async function fetchSpeedNodes(uuid, domain, proxyIP) {
+  const regionNames = { SG: "singapore", JP: "japan", HK: "hongkong", US: "usa", DE: "germany", NL: "netherlands" };
+  const data = {};
+  for (const k of Object.keys(regionNames)) data[k] = [];
+
+  try {
+    const BASE = "https://raw.githubusercontent.com/wszhxz/CloudflareIP/main";
+    const [ctry, more] = await Promise.all([
+      fetch(BASE + "/country.txt"),
+      fetch(BASE + "/More.txt")
+    ]);
+
+    if (ctry.ok) {
+      for (const line of (await ctry.text()).split("\n")) {
+        const m = line.match(/^([\d.]+)#(\S+)\s+\S+\s+\S+\s+([\d.]+)m\/s/);
+        if (!m) continue;
+        const r = m[2].toUpperCase();
+        if (data[r]) data[r].push({ ip: m[1], sp: parseFloat(m[3]) });
+      }
+    }
+
+    if (more.ok) {
+      for (const line of (await more.text()).split("\n")) {
+        const m = line.match(/^([\d.]+)#\u9999\u6e2f-([\d.]+)MB\/s/);
+        if (m) data["HK"].push({ ip: m[1], sp: parseFloat(m[2]) });
+      }
+    }
+  } catch (e) { console.error("fetchSpeedNodes error:", e.message); }
+
+  const nodes = [];
+  const cnames = { SG: "\u65b0\u52a0\u5761", JP: "\u65e5\u672c", HK: "\u9999\u6e2f", US: "\u7f8e\u56fd", DE: "\u5fb7\u56fd", NL: "\u8377\u5170" };
+  for (const [code, name] of Object.entries(cnames)) {
+    const ips = data[code];
+    if (!ips.length) continue;
+    const dedup = {};
+    for (const {ip, sp} of ips) { if (!dedup[ip] || sp > dedup[ip]) dedup[ip] = sp; }
+    Object.entries(dedup).sort(function(a,b){return b[1]-a[1]}).slice(0,3).forEach(function(pair){
+      nodes.push("vless://"+uuid+"@"+pair[0]+":443?encryption=none&security=tls&sni="+domain+"&fp=random&type=ws&host="+domain+"&path=pyip%3D"+proxyIP+"#"+code+" "+name);
+    });
+  }
+  return nodes;
+}
+// 动态获取最新测速节点（从 GitHub Actions 产出）
+
 export default {
   async fetch(访问请求) {
     console.log('收到请求', 访问请求.method, 访问请求.url);
@@ -25,32 +71,19 @@ export default {
         const 请求路径 = 请求URL.pathname;
         const 节点路径 = '/sub';
         if (请求路径 === 节点路径) {
-            const 节点列表 = [
-                // SG 新加坡 (社区测速 Top3)
-                `vless://${我的VL密钥}@198.41.223.110:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#SG 新加坡`,
-                `vless://${我的VL密钥}@162.159.9.209:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#SG 新加坡`,
-                `vless://${我的VL密钥}@162.159.2.42:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#SG 新加坡`,
-                // JP 日本 (社区测速 Top3)
-                `vless://${我的VL密钥}@162.159.38.118:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#JP 日本`,
-                `vless://${我的VL密钥}@172.64.229.156:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#JP 日本`,
-                `vless://${我的VL密钥}@162.159.39.16:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#JP 日本`,
-                // HK 香港 (社区测速 Top3)
-                `vless://${我的VL密钥}@104.26.2.82:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#HK 香港`,
-                `vless://${我的VL密钥}@172.67.76.194:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#HK 香港`,
-                `vless://${我的VL密钥}@104.26.15.34:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#HK 香港`,
-                // US 美国 (社区测速 Top3)
-                `vless://${我的VL密钥}@104.16.94.26:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#US 美国`,
-                `vless://${我的VL密钥}@172.64.176.131:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#US 美国`,
-                `vless://${我的VL密钥}@104.18.2.29:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#US 美国`,
-                // DE 德国 (社区测速 Top3)
-                `vless://${我的VL密钥}@104.25.0.89:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#DE 德国`,
-                `vless://${我的VL密钥}@104.27.2.4:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#DE 德国`,
-                `vless://${我的VL密钥}@104.27.1.111:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#DE 德国`,
-                // NL 荷兰 (社区测速 Top3)
-                `vless://${我的VL密钥}@188.114.97.3:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#NL 荷兰`,
-                `vless://${我的VL密钥}@104.20.2.70:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#NL 荷兰`,
-                `vless://${我的VL密钥}@188.114.99.177:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#NL 荷兰`,
-            ];
+            // 动态拉取最新测速节点
+            let 节点列表 = await fetchSpeedNodes(我的VL密钥, 部署域名, 反代IP);
+            // 如果获取失败，使用静态后备
+            if (节点列表.length === 0) {
+                节点列表 = [
+                    `vless://${我的VL密钥}@198.41.223.110:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#SG 新加坡`,
+                    `vless://${我的VL密钥}@162.159.38.118:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#JP 日本`,
+                    `vless://${我的VL密钥}@104.26.2.82:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#HK 香港`,
+                    `vless://${我的VL密钥}@104.16.94.26:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#US 美国`,
+                    `vless://${我的VL密钥}@104.25.0.89:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#DE 德国`,
+                    `vless://${我的VL密钥}@188.114.97.3:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#NL 荷兰`,
+                ];
+            }
             if (请求URL.searchParams.has('sub')) {
                 const 原始 = 节点列表.join('\n');
                 const 字节 = new TextEncoder().encode(原始);
@@ -63,11 +96,10 @@ export default {
    你的部署域名：${部署域名}
    你的反代ip：${反代IP}
 
-默认节点：
+当前节点（自动匹配最新测速）：
 ${节点列表.join('\n')}
 
-订阅链接：https://${部署域名}/sub?sub
-更多节点使用手搓节点生成器： http://ip.cloudip.ggff.net`, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+订阅链接：https://${部署域名}/sub?sub`, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
         } else {
             return new Response('部署成功，使用你的路径查看节点信息！', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
         }
