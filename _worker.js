@@ -22,10 +22,7 @@ export default {
         const 请求URL = new URL(访问请求.url);
         const 部署域名 = 请求URL.hostname;
         const 请求路径 = 请求URL.pathname;
-
-        // 定义节点信息显示路径
         const 节点路径 = '/sub';
-
         if (请求路径 === 节点路径) {
             return new Response(`部署成功！
 
@@ -43,7 +40,6 @@ vless://${我的VL密钥}@188.114.96.0:443?encryption=none&security=tls&sni=${�
 
 更多节点使用手搓节点生成器： http://ip.cloudip.ggff.net`, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
         } else {
-            // 其他路径返回404响应
             return new Response('部署成功，使用你的路径查看节点信息！', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
         }
     }
@@ -63,10 +59,12 @@ async function 启动传输管道(WS接口, TCP接口) {
       }
     });
     async function 解析首包数据(首包数据) {
+      console.log('收到首包，长度:', 首包数据.byteLength);
       const 二进制数据 = new Uint8Array(首包数据);
       const 协议头 = 二进制数据[0];
       const 验证VL的密钥 = (a, i = 0) => [...a.slice(i, i + 16)].map(b => b.toString(16).padStart(2, '0')).join('').replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
       if (验证VL的密钥(二进制数据.slice(1, 17)) !== 我的VL密钥) throw new Error('UUID验证失败');
+      console.log('UUID验证通过');
       const 提取端口索引 = 18 + 二进制数据[17] + 1;
       const 访问端口 = new DataView(二进制数据.buffer, 提取端口索引, 2).getUint16(0);
       const 提取地址索引 = 提取端口索引 + 2;
@@ -92,25 +90,31 @@ async function 启动传输管道(WS接口, TCP接口) {
         default:
           throw new Error('无效的访问地址');
       }
+      console.log('目标:', 访问地址, '端口:', 访问端口);
       try {
         if (识别地址类型 === 3) {
-          const 转换IPV6地址 = `[${访问地址}]`
+          const 转换IPV6地址 = '[' + 访问地址 + ']';
           TCP接口 = connect({ hostname: 转换IPV6地址, port: 访问端口 });
         } else {
           TCP接口 = connect({ hostname: 访问地址, port: 访问端口 });
         }
         await TCP接口.opened;
-      } catch {
+        console.log('直连成功');
+      } catch(e) {
+        console.log('直连失败:', e.message, '走代理IP:', 反代IP);
         if (!反代IP) throw new Error('直连失败且未配置反代IP');
         const [反代IP地址, 反代IP端口 = 443] = 反代IP.split(':');
         TCP接口 = connect({ hostname: 反代IP地址, port: Number(反代IP端口) });
         await TCP接口.opened;
+        console.log('代理IP连接成功');
       }
+      console.log('TCP通道已打开');
       传输数据 = TCP接口.writable.getWriter();
       读取数据 = TCP接口.readable.getReader();
       const 写入初始数据 = 二进制数据.slice(地址信息索引 + 地址长度);
       if (写入初始数据.length > 0) try { await 传输数据.write(写入初始数据) } catch (e) { throw (e) };
       WS接口.send(new Uint8Array([协议头, 0]));
+      console.log('已发送VLESS响应，启动回传管道');
       启动回传管道();
     }
     async function 启动回传管道() {
@@ -122,9 +126,11 @@ async function 启动传输管道(WS接口, TCP接口) {
         }
         if (流结束) break;
       }
+      console.log('回传管道结束');
       throw new Error('传输完成');
     }
   } catch (e) {
+    console.error('传输管道错误:', e.message);
     try { await TCP接口?.close?.() } catch {};
     try { WS接口?.close?.() } catch {};
   }
