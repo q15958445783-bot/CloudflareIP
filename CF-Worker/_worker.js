@@ -7,7 +7,7 @@
 import { connect } from 'cloudflare:sockets';
 
 let 我的VL密钥 = '60fe73d3-dbf3-44b2-804c-1f791363ef62';//UUID
-let 反代IP = 'proxy.teracoin.top:8443'; //反代IP
+let 反代IP = 'proxyip.cmliussss.net'; //反代IP
 
 export default {
   async fetch(访问请求) {
