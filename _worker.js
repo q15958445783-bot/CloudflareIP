@@ -34,7 +34,9 @@ export default {
                 `vless://${我的VL密钥}@188.114.96.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#NL 荷兰`,
             ];
             if (请求URL.searchParams.has('sub')) {
-                const base64订阅 = btoa(节点列表.join('\n'));
+                const 原始 = 节点列表.join('\n');
+                const 字节 = new TextEncoder().encode(原始);
+                const base64订阅 = btoa(String.fromCharCode(...字节));
                 return new Response(base64订阅, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
             }
             return new Response(`部署成功！
