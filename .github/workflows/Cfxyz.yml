@@ -3,7 +3,7 @@ name: Cfxyz
 on:
   push:              # 每次 push 时触发
   schedule:
-   - cron: '0 */1 * * *' # 每3小时运行一次
+   - cron: '10 2 * * 3' # Runs at 02:10, only on Wednesday
 
 jobs:
   run-script:
