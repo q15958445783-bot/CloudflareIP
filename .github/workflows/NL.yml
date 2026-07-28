@@ -3,7 +3,7 @@ name: NL
 on:
   push:              # 每次 push 时触发
   schedule:
-   - cron: '0 */1 * * *' # 每3小时运行一次
+   - cron: '35 2 * * 3' # Runs at 02:35, only on Wednesday
   workflow_dispatch:      # 允许手动触发
 
 jobs:
