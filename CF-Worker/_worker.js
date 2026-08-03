@@ -11,7 +11,17 @@ let 反代IP = 'proxyip.cmliussss.net'; //反代IP
 
 
 // Dynamic node fetching from GitHub Actions (hourly updated per-region TXT files)
+// 结果缓存：同一片区内避免每次请求都实时去抓 GitHub raw（耗时且易超时）
+let 节点缓存 = { 数据: null, 时间: 0 };
+const 缓存时长 = 30 * 1000; // 30 秒
+
 async function fetchSpeedNodes(uuid, domain, proxyIP) {
+  // 命中缓存则直接复用节点（秒回，避免 Clash 客户端 EOF）
+  const now = Date.now();
+  if (节点缓存.数据 && now - 节点缓存.时间 < 缓存时长) {
+    return 节点缓存.数据;
+  }
+
   const BASE = "https://raw.githubusercontent.com/wszhxz/CloudflareIP/main";
   const regionFiles = {
     SG: "SG.txt", JP: "JP.txt", DE: "DE.txt", NL: "NL.txt", US: "US.txt"
@@ -21,10 +31,15 @@ async function fetchSpeedNodes(uuid, domain, proxyIP) {
   const nodes = [];
 
   try {
-    // Fetch all per-region TXT files in parallel
+    // Fetch all per-region TXT files in parallel, with a hard 2s timeout each
     const fetches = {};
     for (const [code, file] of Object.entries(regionFiles)) {
-      fetches[code] = fetch(BASE + "/" + file).then(r => r.ok ? r.text() : "").catch(() => "");
+      const 控制器 = new AbortController();
+      const 超时 = setTimeout(() => 控制器.abort(), 2000);
+      fetches[code] = fetch(BASE + "/" + file, { signal: 控制器.signal })
+        .then(r => r.ok ? r.text() : "")
+        .catch(() => "")
+        .finally(() => clearTimeout(超时));
     }
     // HK removed: Cloudflare anycast IPs have no true geolocation
 
@@ -54,6 +69,8 @@ async function fetchSpeedNodes(uuid, domain, proxyIP) {
     }
   } catch (e) { console.error("fetchSpeedNodes error:", e.message); }
 
+  // 写入缓存（即使为空也缓存，避免每次都重试拖慢）
+  节点缓存 = { 数据: nodes, 时间: Date.now() };
   return nodes;
 }
 // 动态获取最新测速节点（从 GitHub Actions 产出）
