@@ -60,35 +60,35 @@ async function fetchSpeedNodes(uuid, domain, proxyIP) {
 
 // 生成 Clash Meta（mihomo / ClashMetaForAndroid）订阅 YAML 配置
 function 生成Clash配置(节点列表, 部署域名, uuid, 反代IP) {
-  const proxies = 节点列表.map(node => {
-    // 解析 vless://uuid@ip:port?...&path=pyip%3D反代IP#节点名
+  // 先为每个节点生成唯一名称（同名节点加序号，避免 Clash 策略组引用冲突）
+  const nameCount = {};
+  const 命名节点 = 节点列表.map(node => {
     const m = node.match(/^vless:\/\/([^@]+)@([^:]+):([0-9]+)\?(.*)#(.+)$/);
     if (!m) return null;
     const [, , server, port, , name] = m;
-    const nameClean = name.replace(/"/g, `'`);
-    return [
-      `  - name: "${nameClean}"`,
-      `    type: vless`,
-      `    server: ${server}`,
-      `    port: ${port}`,
-      `    uuid: ${uuid}`,
-      `    tls: true`,
-      `    network: ws`,
-      `    servername: ${部署域名}`,
-      `    client-fingerprint: chrome`,
-      `    ws-opts:`,
-      `      path: "/pyip=${反代IP}"`,
-      `      headers:`,
-      `        Host: ${部署域名}`
-    ].join('\n');
+    const base = name.replace(/"/g, `'`);
+    nameCount[base] = (nameCount[base] || 0) + 1;
+    const 唯一名 = nameCount[base] > 1 ? `${base}-${nameCount[base]}` : base;
+    return { name: 唯一名, server, port };
   }).filter(Boolean);
 
-  // 节点名称列表（用于策略组）
-  const proxyNames = 节点列表.map(node => {
-    const m = node.match(/^vless:\/\/[^@]+@[^:]+:[0-9]+\?(.*)#(.+)$/);
-    return m ? m[2] : null;
-  }).filter(Boolean);
+  const proxies = 命名节点.map(({ name, server, port }) => [
+    `  - name: "${name}"`,
+    `    type: vless`,
+    `    server: ${server}`,
+    `    port: ${port}`,
+    `    uuid: ${uuid}`,
+    `    tls: true`,
+    `    network: ws`,
+    `    servername: ${部署域名}`,
+    `    client-fingerprint: chrome`,
+    `    ws-opts:`,
+    `      path: "/pyip=${反代IP}"`,
+    `      headers:`,
+    `        Host: ${部署域名}`
+  ].join('\n'));
 
+  const proxyNames = 命名节点.map(n => n.name);
   const proxylist = proxyNames.map(n => `      - "${n}"`).join('\n');
   const grouplist = proxyNames.map(n => `      - "${n}"`).join('\n');
 
@@ -117,6 +117,7 @@ ${proxylist}
     url: "https://www.gstatic.com/generate_204"
     interval: 300
     tolerance: 50
+    proxies:
 ${grouplist}
 
 rules:
