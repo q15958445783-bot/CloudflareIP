@@ -58,6 +58,77 @@ async function fetchSpeedNodes(uuid, domain, proxyIP) {
 }
 // 动态获取最新测速节点（从 GitHub Actions 产出）
 
+// 生成 Clash Meta（mihomo / ClashMetaForAndroid）订阅 YAML 配置
+function 生成Clash配置(节点列表, 部署域名, uuid, 反代IP) {
+  const proxies = 节点列表.map(node => {
+    // 解析 vless://uuid@ip:port?...&path=pyip%3D反代IP#节点名
+    const m = node.match(/^vless:\/\/([^@]+)@([^:]+):([0-9]+)\?(.*)#(.+)$/);
+    if (!m) return null;
+    const [, , server, port, , name] = m;
+    const nameClean = name.replace(/"/g, `'`);
+    return [
+      `  - name: "${nameClean}"`,
+      `    type: vless`,
+      `    server: ${server}`,
+      `    port: ${port}`,
+      `    uuid: ${uuid}`,
+      `    tls: true`,
+      `    network: ws`,
+      `    servername: ${部署域名}`,
+      `    client-fingerprint: chrome`,
+      `    ws-opts:`,
+      `      path: "/pyip=${反代IP}"`,
+      `      headers:`,
+      `        Host: ${部署域名}`
+    ].join('\n');
+  }).filter(Boolean);
+
+  // 节点名称列表（用于策略组）
+  const proxyNames = 节点列表.map(node => {
+    const m = node.match(/^vless:\/\/[^@]+@[^:]+:[0-9]+\?(.*)#(.+)$/);
+    return m ? m[2] : null;
+  }).filter(Boolean);
+
+  const proxylist = proxyNames.map(n => `      - "${n}"`).join('\n');
+  const grouplist = proxyNames.map(n => `      - "${n}"`).join('\n');
+
+  return `# CloudflareIP Clash Meta 订阅
+# 部署域名: ${部署域名}
+port: 7890
+socks-port: 7891
+allow-lan: true
+mode: rule
+log-level: info
+ipv6: false
+
+proxies:
+${proxies.join('\n')}
+
+proxy-groups:
+  - name: "🚀 节点选择"
+    type: select
+    proxies:
+      - "♻️ 自动选择"
+      - "DIRECT"
+${proxylist}
+
+  - name: "♻️ 自动选择"
+    type: url-test
+    url: "https://www.gstatic.com/generate_204"
+    interval: 300
+    tolerance: 50
+${grouplist}
+
+rules:
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - GEOIP,CN,DIRECT
+  - MATCH,🚀 节点选择
+`;
+}
+
 export default {
   async fetch(访问请求) {
     console.log('收到请求', 访问请求.method, 访问请求.url);
@@ -93,6 +164,10 @@ export default {
                 const base64订阅 = btoa(String.fromCharCode(...字节));
                 return new Response(base64订阅, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
             }
+            if (请求URL.searchParams.has('clash')) {
+                const clash配置 = 生成Clash配置(节点列表, 部署域名, 我的VL密钥, 反代IP);
+                return new Response(clash配置, { status: 200, headers: { 'Content-Type': 'text/yaml; charset=utf-8' } });
+            }
             return new Response(`部署成功！
 
    你的UUID: ${我的VL密钥}
@@ -102,7 +177,9 @@ export default {
 当前节点（自动匹配最新测速）：
 ${节点列表.join('\n')}
 
-订阅链接：https://${部署域名}/sub?sub`, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+订阅链接：
+Clash: https://${部署域名}/sub?clash
+Shadowrocket: https://${部署域名}/sub?sub`, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
         } else {
             return new Response('部署成功，使用你的路径查看节点信息！', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
         }
