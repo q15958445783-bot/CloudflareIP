@@ -279,7 +279,7 @@ class CloudflareNodeTester:
         
         # 显示前N个最快节点，包含中文国家信息
         for i, node in enumerate(sorted_nodes[:TOP_NODES], 1):
-            country = get_ip_country(node['ip'])
+            # 标签为硬编码，无需调用慢速地理API
             print(f"{node['ip']}#de 【德国】 DE")
         
         return sorted_nodes
@@ -288,13 +288,13 @@ class CloudflareNodeTester:
         """只保存前30名结果到TXT文件，并显示中文国家信息"""
         try:
             # 只取前30名结果
-            top_results = results[:10]  # 明确只取前30名
+            top_results = results[:TOP_NODES]  # 取最快的TOP_NODES个
             
             with open(TXT_OUTPUT_FILE, 'w', encoding='utf-8') as f:
                 # 清空文件并只写入前30个结果
                 for i, node in enumerate(top_results):
                     # 获取IP的国家信息（已经是中文）
-                    country = get_ip_country(node['ip'])
+                    # 标签为硬编码，无需调用慢速地理API
                     line = f"{node['ip']}#de 【德国】 DE\n"
                     f.write(line)
             
