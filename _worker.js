@@ -22,7 +22,7 @@ async function fetchSpeedNodes(uuid, domain, proxyIP) {
     return 节点缓存.数据;
   }
 
-  const BASE = "https://raw.githubusercontent.com/wszhxz/CloudflareIP/main";
+  const BASE = "https://raw.githubusercontent.com/q15958445783-bot/CloudflareIP/main";
   const regionFiles = {
     SG: "SG.txt", JP: "JP.txt", DE: "DE.txt", NL: "NL.txt", US: "US.txt"
   };

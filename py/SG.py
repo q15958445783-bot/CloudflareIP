@@ -146,27 +146,52 @@ class CloudflareNodeTester:
         self.lock = threading.Lock()
     
     def fetch_known_nodes(self):
-        """从公开来源获取已知的Cloudflare节点IP"""
+        """从公开来源获取已知的Cloudflare节点IP / 从国家IP池拉取真实节点(兼容原逻辑)"""
+        import random
+        random.seed(42)
+        country_code = "SG"
+        sample_n = 40
 
-        
-        # 常见的Cloudflare IP段
-        ip_ranges = [
+        # 数据源: 按国家打标签的真实 CF IP 池 (IP:443#国家代码)
+        source_url = "https://zip.cm.edu.kg/all.txt"
+        found = []
+        try:
+            import requests
+            resp = requests.get(source_url, timeout=10)
+            if resp.status_code == 200:
+                for line in resp.text.strip().split("\n"):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    # 形如: 128.199.82.20:443#SG
+                    if line.endswith("#" + country_code):
+                        ip_part = line.split(":")[0]
+                        if ip_part.count(".") == 3:
+                            found.append(ip_part)
+            print("拉取国家池 %s: 共 %d 个候选" % (country_code, len(found)))
+        except Exception as e:
+            print("拉取国家池失败: %s" % e)
+
+        if found:
+            # 随机抽 sample_n 个，作为该国家节点候选
+            random.shuffle(found)
+            for ip in found[:sample_n]:
+                self.nodes.add(ip)
+            print("抽取 %d 个候选节点测速" % min(sample_n, len(found)))
+        else:
+            # 回退: 原硬编码网段（数据源不可达时保证不空）
+            ip_ranges = [
 "108.162.192.0/24",
 "162.159.0.0/24",
 "172.64.32.0/24"
-        ]
-        
-        # 从IP段生成部分IP示例
-        for ip_range in ip_ranges:
-            base_ip, cidr = ip_range.split('/')
-            octets = base_ip.split('.')
-            
-            # 生成该网段的一些示例IP
-            for i in range(1, 10):  # 每个网段生成9个示例IP
-                ip = f"{octets[0]}.{octets[1]}.{octets[2]}.{i + int(octets[3])}"
-                self.nodes.add(ip)
-        
-    
+            ]
+            for ip_range in ip_ranges:
+                base_ip, cidr = ip_range.split("/")
+                octets = base_ip.split(".")
+                for i in range(1, 10):
+                    ip = "%s.%s.%s.%d" % (octets[0], octets[1], octets[2], i + int(octets[3]))
+                    self.nodes.add(ip)
+            print("数据源不可达，回退到硬编码网段")
     def test_node_speed(self, ip):
         """测试单个节点的连接速度"""
         try:
